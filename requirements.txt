@@ -3,3 +3,6 @@ langgraph
 pypdf
 docx
 lancedb
+python-docx
+python-dotenv
+langchain_openai
