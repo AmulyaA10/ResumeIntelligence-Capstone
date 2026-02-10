@@ -1,12 +1,9 @@
 from typing import TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
-
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+from services.llm_config import get_llm
+import json
 
-import os, json
-from dotenv import load_dotenv
-load_dotenv()
 # -----------------------------
 # State
 # -----------------------------
@@ -19,21 +16,9 @@ class ResumeQualityState(TypedDict):
 # -----------------------------
 # LLM
 # -----------------------------
-#llm = ChatOpenAI(
-   # model="gpt-4o-mini",
-   # temperature=0,
-  #  api_key=os.getenv("OPENAI_API_KEY")
-#)
+llm = get_llm(temperature=0)
 
-llm = ChatOpenAI(
-    model="openai/gpt-4o-mini",
-    temperature=0,
-    api_key=os.getenv("OPEN_ROUTER_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
-
-print(os.getenv("OPENAI_API_KEY"))
-# -----------------------------ssss
+# -----------------------------
 # Agents
 # -----------------------------
 def resume_reader_agent(state: ResumeQualityState):

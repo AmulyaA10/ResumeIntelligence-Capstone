@@ -1,20 +1,11 @@
 # services/skill_gap_graph.py
 from typing import TypedDict, List, Optional
-
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
+from services.llm_config import get_llm
 import json
-import os
-from dotenv import load_dotenv
-load_dotenv()
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0,
-     api_key=os.getenv("OPEN_ROUTER_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
+llm = get_llm(temperature=0)
 
 class SkillGapState(TypedDict):
     resume_text: str

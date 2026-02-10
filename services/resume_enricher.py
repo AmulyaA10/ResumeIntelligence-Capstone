@@ -4,21 +4,12 @@ Extracts structured signals from resumes for evidence-based scoring
 """
 
 from typing import TypedDict, List, Optional, Dict
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+from services.llm_config import get_llm
 import json
-import os
 import re
-from dotenv import load_dotenv
 
-load_dotenv()
-
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0,
-    api_key=os.getenv("OPEN_ROUTER_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
+llm = get_llm(temperature=0)
 
 
 class ResumeSignals(TypedDict):

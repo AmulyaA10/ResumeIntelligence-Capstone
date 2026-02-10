@@ -23,20 +23,19 @@ if st.button("🚀 Process Resumes"):
         for file in files:
             file_path = os.path.join(UPLOAD_DIR, file.name)
 
-            # 🔽 SAVE FILE
+            # Save file to disk
             with open(file_path, "wb") as f:
                 f.write(file.getbuffer())
 
-                text = extract_text(file_path)
-                
+            # Extract text after file is written and closed
+            text = extract_text(file_path)
 
-                if store_db:
-                 store_resume(file.name, text)
+            if store_db:
+                store_resume(file.name, text)
 
             st.success(f"{file.name} saved successfully")
 
         st.info("All resumes stored locally")
-        st.success(f"{file.name} indexed successfully")
-
-        
+        if store_db:
+            st.success("All resumes indexed in database")
 

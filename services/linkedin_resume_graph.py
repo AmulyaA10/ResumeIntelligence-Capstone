@@ -1,9 +1,7 @@
 from typing import TypedDict, Optional, Dict
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
-import os, json
-from dotenv import load_dotenv
-load_dotenv()
+from services.llm_config import get_llm
+import json
 
 class LinkedInResumeState(TypedDict):
     linkedin_url: str
@@ -12,12 +10,7 @@ class LinkedInResumeState(TypedDict):
     resume: Optional[str]
 
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0.3,
-    api_key=os.getenv("OPEN_ROUTER_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
+llm = get_llm(temperature=0.3)
 
 def linkedin_fetch_agent(state: LinkedInResumeState):
     # MOCKED profile content (capstone safe)

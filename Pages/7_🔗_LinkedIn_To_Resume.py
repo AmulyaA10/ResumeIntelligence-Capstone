@@ -2,7 +2,6 @@
 import streamlit as st
 from services.agent_controller import generate_resume_from_linkedin
 
-st.set_page_config(layout="wide")
 st.header("🔗 LinkedIn → Resume (LangGraph AI)")
 
 linkedin_url = st.text_input(

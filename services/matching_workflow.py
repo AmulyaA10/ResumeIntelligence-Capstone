@@ -10,6 +10,29 @@ from services.resume_enricher import extract_resume_signals
 from services.risk_detector import detect_risk_flags
 from services.scoring_engine import calculate_total_score
 from services.explainer import generate_full_explanation, generate_recommendation, generate_summary_line
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def validate_api_key():
+    """
+    Validate that API key is configured before running workflow.
+
+    Raises:
+        ValueError: If no valid API key is found in environment
+    """
+    open_router_key = os.getenv("OPEN_ROUTER_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if not open_router_key and not openai_key:
+        raise ValueError(
+            "No API key found. Please set OPEN_ROUTER_KEY or OPENAI_API_KEY in your .env file.\n"
+            "Get an API key at: https://openrouter.ai/ or https://platform.openai.com/"
+        )
+
+    return True
 
 
 class MatchingState(TypedDict):
@@ -141,7 +164,13 @@ def match_resumes_to_jd(jd_text: str, resume_texts: List[str]) -> Dict:
 
     Returns:
         Dict with ranked_candidates and jd_requirements
+
+    Raises:
+        ValueError: If API key is not configured
     """
+
+    # Validate API key before processing
+    validate_api_key()
 
     workflow = build_matching_workflow()
 

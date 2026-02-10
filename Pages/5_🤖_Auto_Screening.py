@@ -1,7 +1,6 @@
 import streamlit as st
 from services.agent_controller import run_resume_pipeline
 
-st.set_page_config(layout="wide")
 st.header("🤖 Auto Screening Decision (LangGraph Powered)")
 
 resume_text = st.text_area(

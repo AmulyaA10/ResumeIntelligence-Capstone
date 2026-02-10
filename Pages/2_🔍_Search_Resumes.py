@@ -1,28 +1,13 @@
 import os
 import json
 import streamlit as st
-from dotenv import load_dotenv
-
-# -----------------------------
-# LangChain 1.x imports
-# -----------------------------
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-
-# -----------------------------
-# DB
-# -----------------------------
 from services.db.lancedb_client import get_or_create_table
-
-# -----------------------------
-# Config
-# -----------------------------
-load_dotenv()
+from services.llm_config import get_llm
 
 RESUME_DIR = "data/raw_resumes"
 
-st.set_page_config(page_title="🔍 Search Resumes", layout="wide")
 st.title("🔍 Resume Search (LLM Powered)")
 
 # -----------------------------
@@ -57,17 +42,6 @@ Resume:
 {row['text']}
 --------------------
 """
-def skill_gap_agent(state):
-    resume = set(state["normalized_resume_skills"])
-    required = set(state["normalized_required_skills"])
-
-    return {
-        "gaps": {
-            "missing_skills": list(required - resume),
-            "matched_skills": list(required & resume)
-        }
-    }
-
 
 # -----------------------------
 # Prompt (STRICT JSON)
@@ -108,14 +82,9 @@ If no resumes match:
 )
 
 # -----------------------------
-# LLM (Low cost + supported)
+# LLM
 # -----------------------------
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0,
-    api_key=os.getenv("OPEN_ROUTER_KEY"),
-    base_url="https://openrouter.ai/api/v1"
-)
+llm = get_llm(temperature=0)
 
 chain = prompt | llm | StrOutputParser()
 

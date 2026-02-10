@@ -1,8 +1,14 @@
 streamlit
 langgraph
+langchain-core
+langchain-openai
+openai
 pypdf
-docx
-lancedb
 python-docx
 python-dotenv
-langchain_openai
+lancedb
+pyarrow
+pandas
+langchain-anthropic
+langchain-google-genai
+langchain-groq

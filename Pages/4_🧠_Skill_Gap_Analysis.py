@@ -1,7 +1,6 @@
 import streamlit as st
 from services.agent_controller import run_resume_pipeline
 
-st.set_page_config(layout="wide")
 st.header("🧠 Skill Gap Analysis (LangGraph Powered)")
 
 col1, col2 = st.columns(2)

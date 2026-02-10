@@ -8,12 +8,7 @@ import pandas as pd
 from services.matching_workflow import match_resumes_to_jd
 from services.resume_parser import extract_text
 import os
-
-st.set_page_config(
-    page_title="JD-Resume Matching & Ranking",
-    page_icon="🎯",
-    layout="wide"
-)
+import tempfile
 
 st.title("🎯 JD-Resume Matching & Ranking")
 st.markdown("**Explainable, evidence-based candidate screening per PRD rubric**")
@@ -44,18 +39,24 @@ else:
     )
 
     if jd_file:
-        # Save temporarily and extract text
-        temp_path = f"/tmp/{jd_file.name}"
-        with open(temp_path, "wb") as f:
-            f.write(jd_file.getbuffer())
+        # Save temporarily and extract text (cross-platform temp file)
+        suffix = os.path.splitext(jd_file.name)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(jd_file.getbuffer())
+            temp_path = tmp.name
 
-        if jd_file.name.endswith(".txt"):
-            with open(temp_path, "r", encoding="utf-8") as f:
-                jd_text = f.read()
-        else:
-            jd_text = extract_text(temp_path)
+        try:
+            if jd_file.name.endswith(".txt"):
+                with open(temp_path, "r", encoding="utf-8") as f:
+                    jd_text = f.read()
+            else:
+                jd_text = extract_text(temp_path)
 
-        st.success(f"✅ Loaded JD from {jd_file.name}")
+            st.success(f"✅ Loaded JD from {jd_file.name}")
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
 st.markdown("---")
 
@@ -79,12 +80,19 @@ if resume_input_method == "Upload Files":
 
     if resume_files:
         for resume_file in resume_files:
-            temp_path = f"/tmp/{resume_file.name}"
-            with open(temp_path, "wb") as f:
-                f.write(resume_file.getbuffer())
+            # Create cross-platform temp file
+            suffix = os.path.splitext(resume_file.name)[1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(resume_file.getbuffer())
+                temp_path = tmp.name
 
-            text = extract_text(temp_path)
-            resume_texts.append(text)
+            try:
+                text = extract_text(temp_path)
+                resume_texts.append(text)
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
 
         st.success(f"✅ Loaded {len(resume_texts)} resumes")
 
@@ -149,6 +157,7 @@ st.markdown("---")
 
 # ===== SECTION 4: Run Matching =====
 if st.button("🚀 Run Matching & Ranking", type="primary", use_container_width=True):
+    # Input validation
     if not jd_text.strip():
         st.error("❌ Please provide a job description")
         st.stop()
@@ -157,6 +166,16 @@ if st.button("🚀 Run Matching & Ranking", type="primary", use_container_width=
         st.error("❌ Please provide at least one resume")
         st.stop()
 
+    # Check for empty resumes
+    valid_resumes = [r for r in resume_texts if r.strip()]
+    if len(valid_resumes) == 0:
+        st.error("❌ All resumes are empty. Please check your input files.")
+        st.stop()
+
+    if len(valid_resumes) < len(resume_texts):
+        st.warning(f"⚠️ Skipping {len(resume_texts) - len(valid_resumes)} empty resume(s)")
+        resume_texts = valid_resumes
+
     with st.spinner(f"🔄 Processing JD + {len(resume_texts)} resumes..."):
         try:
             result = match_resumes_to_jd(jd_text, resume_texts)
@@ -164,8 +183,22 @@ if st.button("🚀 Run Matching & Ranking", type="primary", use_container_width=
             st.session_state["matching_result"] = result
             st.success(f"✅ Matching complete! Processed {result['total_candidates']} candidates")
 
+        except ValueError as e:
+            # Configuration errors (missing API key, etc.)
+            st.error(f"❌ Configuration Error: {e}")
+            st.info("💡 Please check your .env file and ensure API keys are properly configured.")
+            st.code("OPEN_ROUTER_KEY=your-api-key-here")
+            st.stop()
+
         except Exception as e:
+            # Other errors (API issues, parsing errors, etc.)
             st.error(f"❌ Error during matching: {e}")
+            st.info("💡 This might be due to:\n"
+                   "- API rate limits or service issues\n"
+                   "- Malformed input (empty or corrupted files)\n"
+                   "- Network connectivity problems")
+            with st.expander("🔍 View Full Error Details"):
+                st.exception(e)
             st.stop()
 
 st.markdown("---")
