@@ -1,7 +1,7 @@
 from typing import TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import PromptTemplate
-from services.llm_config import get_llm
+from services.llm_config import get_llm, extract_json
 import json
 
 # -----------------------------
@@ -11,12 +11,6 @@ class ResumeQualityState(TypedDict):
     resumes: List[str]
     parsed: Optional[str]
     score: Optional[dict]
-
-
-# -----------------------------
-# LLM
-# -----------------------------
-llm = get_llm(temperature=0)
 
 # -----------------------------
 # Agents
@@ -49,11 +43,16 @@ Return ONLY valid JSON:
 """
 )
 
+    llm = get_llm(temperature=0)
     response = llm.invoke(
         prompt.format(resume=state["parsed"])
     )
 
-    return {"score": json.loads(response.content)}
+    content = extract_json(response.content)
+    try:
+        return {"score": json.loads(content)}
+    except json.JSONDecodeError:
+        return {"score": {"clarity": 0, "skills": 0, "format": 0, "overall": 0}}
 
 
 # -----------------------------

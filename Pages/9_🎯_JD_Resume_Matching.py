@@ -1,6 +1,5 @@
 """
-JD-Resume Matching & Ranking Dashboard - FR5 Implementation
-Main page for batch candidate evaluation per PRD
+JD-Resume Matching & Ranking Dashboard
 """
 
 import streamlit as st
@@ -11,7 +10,7 @@ import os
 import tempfile
 
 st.title("🎯 JD-Resume Matching & Ranking")
-st.markdown("**Explainable, evidence-based candidate screening per PRD rubric**")
+st.caption("Explainable, evidence-based candidate screening with 100-point rubric scoring.")
 
 st.markdown("---")
 
@@ -157,6 +156,11 @@ st.markdown("---")
 
 # ===== SECTION 4: Run Matching =====
 if st.button("🚀 Run Matching & Ranking", type="primary", use_container_width=True):
+    # LLM guard
+    if not st.session_state.get("llm_configured"):
+        st.error("⚠️ Please configure an LLM provider in the sidebar before running matching.")
+        st.stop()
+
     # Input validation
     if not jd_text.strip():
         st.error("❌ Please provide a job description")
@@ -184,20 +188,12 @@ if st.button("🚀 Run Matching & Ranking", type="primary", use_container_width=
             st.success(f"✅ Matching complete! Processed {result['total_candidates']} candidates")
 
         except ValueError as e:
-            # Configuration errors (missing API key, etc.)
-            st.error(f"❌ Configuration Error: {e}")
-            st.info("💡 Please check your .env file and ensure API keys are properly configured.")
-            st.code("OPEN_ROUTER_KEY=your-api-key-here")
+            st.error(f"Configuration Error: {e}")
             st.stop()
 
         except Exception as e:
-            # Other errors (API issues, parsing errors, etc.)
-            st.error(f"❌ Error during matching: {e}")
-            st.info("💡 This might be due to:\n"
-                   "- API rate limits or service issues\n"
-                   "- Malformed input (empty or corrupted files)\n"
-                   "- Network connectivity problems")
-            with st.expander("🔍 View Full Error Details"):
+            st.error(f"Error during matching: {e}")
+            with st.expander("View error details"):
                 st.exception(e)
             st.stop()
 

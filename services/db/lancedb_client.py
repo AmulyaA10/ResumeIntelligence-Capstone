@@ -4,7 +4,9 @@ from uuid import uuid4
 import pyarrow as pa
 
 # ---------- DB PATH ----------
-DB_PATH = Path("data/lancedb")
+# Use path relative to project root (parent of services/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DB_PATH = PROJECT_ROOT / "data" / "lancedb"
 DB_PATH.mkdir(parents=True, exist_ok=True)
 
 db = lancedb.connect(DB_PATH)

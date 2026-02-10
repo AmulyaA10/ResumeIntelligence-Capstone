@@ -4,7 +4,10 @@ Detects vague claims, buzzwords, and weak evidence in resumes
 """
 
 from typing import List, Dict
+from datetime import datetime
 import re
+
+CURRENT_YEAR = datetime.now().year
 
 
 # Buzzword list (common inflated terms without context)
@@ -119,10 +122,10 @@ def detect_risk_flags(resume_signals: dict, jd_requirements: dict) -> RiskFlags:
     has_recent = recency.get("has_recent_experience", False)
     most_recent_year = recency.get("most_recent_role_year", 0)
 
-    if not has_recent and most_recent_year > 0 and most_recent_year < 2022:
+    if not has_recent and most_recent_year > 0 and most_recent_year < CURRENT_YEAR - 2:
         risks.add_flag(
             "OUTDATED_EXPERIENCE",
-            f"Most recent experience is from {most_recent_year}; no recent (2022+) work shown",
+            f"Most recent experience is from {most_recent_year}; no recent ({CURRENT_YEAR - 2}+) work shown",
             penalty=4
         )
 

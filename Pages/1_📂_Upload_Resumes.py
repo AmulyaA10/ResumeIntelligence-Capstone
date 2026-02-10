@@ -1,41 +1,53 @@
 import streamlit as st
 import os
+from pathlib import Path
 from services.resume_parser import extract_text
 from services.db.lancedb_client import store_resume
 
-UPLOAD_DIR = "data/raw_resumes"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+UPLOAD_DIR = str(PROJECT_ROOT / "data" / "raw_resumes")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-st.header("📂 Upload Resumes")
+st.title("📂 Upload Resumes")
+st.caption("Upload PDF or DOCX files to parse and store in the vector database.")
+
+st.markdown("---")
 
 files = st.file_uploader(
-    "Upload resumes (PDF / DOCX)",
+    "Select resume files",
     type=["pdf", "docx"],
-    accept_multiple_files=True
+    accept_multiple_files=True,
 )
 
 store_db = st.checkbox("Store in Vector Database (LanceDB)", value=True)
 
-if st.button("🚀 Process Resumes"):
+if st.button("Process Resumes", type="primary"):
     if not files:
-        st.warning("Please upload at least one resume")
+        st.warning("Please upload at least one resume.")
     else:
-        for file in files:
+        progress = st.progress(0, text="Processing...")
+        success_count = 0
+        for idx, file in enumerate(files):
             file_path = os.path.join(UPLOAD_DIR, file.name)
 
-            # Save file to disk
-            with open(file_path, "wb") as f:
-                f.write(file.getbuffer())
+            try:
+                with open(file_path, "wb") as f:
+                    f.write(file.getbuffer())
 
-            # Extract text after file is written and closed
-            text = extract_text(file_path)
+                text = extract_text(file_path)
 
+                if store_db:
+                    store_resume(file.name, text)
+
+                success_count += 1
+            except Exception as e:
+                st.error(f"❌ Failed to process {file.name}: {e}")
+
+            progress.progress((idx + 1) / len(files), text=f"Processed {file.name}")
+
+        progress.empty()
+        if success_count > 0:
+            st.success(f"Processed {success_count} of {len(files)} resume(s) successfully.")
             if store_db:
-                store_resume(file.name, text)
-
-            st.success(f"{file.name} saved successfully")
-
-        st.info("All resumes stored locally")
-        if store_db:
-            st.success("All resumes indexed in database")
+                st.info(f"{success_count} resumes indexed in LanceDB.")
 

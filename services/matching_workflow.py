@@ -1,6 +1,6 @@
 """
-JD-Resume Matching Workflow - LangGraph Implementation
-Orchestrates the complete matching pipeline per PRD
+JD-Resume Matching Workflow (LangGraph)
+Orchestrates the complete JD-resume matching pipeline.
 """
 
 from typing import TypedDict, List, Optional, Dict, Any
@@ -10,29 +10,26 @@ from services.resume_enricher import extract_resume_signals
 from services.risk_detector import detect_risk_flags
 from services.scoring_engine import calculate_total_score
 from services.explainer import generate_full_explanation, generate_recommendation, generate_summary_line
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 def validate_api_key():
     """
-    Validate that API key is configured before running workflow.
+    Validate that an LLM API key is available via sidebar session state.
 
     Raises:
-        ValueError: If no valid API key is found in environment
+        ValueError: If no valid API key is found
     """
-    open_router_key = os.getenv("OPEN_ROUTER_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
+    try:
+        import streamlit as st
+        if st.session_state.get("llm_configured"):
+            return True
+    except Exception:
+        pass
 
-    if not open_router_key and not openai_key:
-        raise ValueError(
-            "No API key found. Please set OPEN_ROUTER_KEY or OPENAI_API_KEY in your .env file.\n"
-            "Get an API key at: https://openrouter.ai/ or https://platform.openai.com/"
-        )
-
-    return True
+    raise ValueError(
+        "No LLM configured. Please select a provider and enter your API key "
+        "in the sidebar (⚙️ LLM Configuration)."
+    )
 
 
 class MatchingState(TypedDict):

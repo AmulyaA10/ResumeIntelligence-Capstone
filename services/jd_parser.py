@@ -1,14 +1,12 @@
 """
-JD Parser Module - FR1 Implementation
-Extracts structured requirements from job descriptions
+JD Parser Module
+Extracts structured requirements from job descriptions.
 """
 
 from typing import TypedDict, List, Optional
 from langchain_core.prompts import PromptTemplate
-from services.llm_config import get_llm
+from services.llm_config import get_llm, extract_json
 import json
-
-llm = get_llm(temperature=0)
 
 
 class JDRequirements(TypedDict):
@@ -71,17 +69,20 @@ Return ONLY valid JSON (no markdown, no explanation):
 """
     )
 
+    llm = get_llm(temperature=0)
     response = llm.invoke(prompt.format(jd=jd_text))
 
     try:
-        parsed = json.loads(response.content)
+        content = extract_json(response.content)
+
+        parsed = json.loads(content)
 
         # Ensure must_have_skills is capped at 10
         if len(parsed.get("must_have_skills", [])) > 10:
             parsed["must_have_skills"] = parsed["must_have_skills"][:10]
 
         return parsed
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         # Fallback to minimal structure if parsing fails
         return {
             "must_have_skills": [],

@@ -1,9 +1,12 @@
 """
-100-Point Scoring Engine - FR3 Implementation
-Rule-based, explainable scoring system per PRD rubric
+100-Point Scoring Engine
+Rule-based, explainable scoring system.
 """
 
 from typing import Dict, List
+from datetime import datetime
+
+CURRENT_YEAR = datetime.now().year
 
 
 def calculate_skill_coverage_score(
@@ -276,11 +279,11 @@ def calculate_recency_score(resume_signals: dict) -> Dict:
     recency = resume_signals.get("recency_indicators", {})
     most_recent_year = recency.get("most_recent_role_year", 0)
 
-    if most_recent_year >= 2023:
+    if most_recent_year >= CURRENT_YEAR - 1:
         score = 10
-    elif most_recent_year >= 2022:
+    elif most_recent_year >= CURRENT_YEAR - 2:
         score = 7
-    elif most_recent_year >= 2020:
+    elif most_recent_year >= CURRENT_YEAR - 4:
         score = 4
     else:
         score = 0

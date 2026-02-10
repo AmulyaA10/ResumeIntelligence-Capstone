@@ -1,407 +1,202 @@
-# Resume Intelligence MVP - System Architecture
+# Architecture - Resume Intelligence Platform
 
-## 📐 High-Level Architecture
+## Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        STREAMLIT FRONTEND                            │
-│  Pages/9_🎯_JD_Resume_Matching.py - Main Dashboard                  │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    LANGGRAPH WORKFLOW LAYER                          │
-│  services/matching_workflow.py - Orchestration                      │
-│                                                                       │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐            │
-│  │ JD Parser   │ -> │  Resume     │ -> │  Ranking    │            │
-│  │   Agent     │    │ Processor   │    │   Agent     │            │
-│  └─────────────┘    └─────────────┘    └─────────────┘            │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                       CORE SERVICE LAYER                             │
-│                                                                       │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │
-│  │  jd_parser.py    │  │resume_enricher.py│  │risk_detector.py  │ │
-│  │  - Extract       │  │  - Extract       │  │  - Detect flags  │ │
-│  │    skills        │  │    signals       │  │  - Calculate     │ │
-│  │  - Extract       │  │  - Projects      │  │    penalties     │ │
-│  │    requirements  │  │  - Metrics       │  │                  │ │
-│  │  - Domain        │  │  - Recency       │  │                  │ │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘ │
-│                                                                       │
-│  ┌──────────────────┐  ┌──────────────────┐                        │
-│  │scoring_engine.py │  │  explainer.py    │                        │
-│  │  - 6 components  │  │  - Generate      │                        │
-│  │  - 100-pt rubric │  │    explanations  │                        │
-│  │  - Final score   │  │  - Recommend     │                        │
-│  └──────────────────┘  └──────────────────┘                        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                          LLM LAYER                                   │
-│  - OpenRouter / OpenAI GPT-4o-mini                                  │
-│  - Used for: JD parsing, Resume signal extraction                   │
-│  - NOT used for: Scoring (rule-based)                               │
-└─────────────────────────────────────────────────────────────────────┘
-```
+This is a **multi-page Streamlit application** that uses **LangGraph agentic workflows** and **LangChain** to provide AI-powered resume screening, scoring, and candidate ranking. Users select their preferred LLM provider via the sidebar UI — no hardcoded API keys.
 
 ---
 
-## 🔄 Data Flow: JD-Resume Matching
+## Tech Stack
 
-```
-1. USER INPUT
-   ├─ Job Description (text or file)
-   └─ Resumes (files, DB, or text)
-          ↓
-2. LANGGRAPH WORKFLOW STARTS
-          ↓
-3. JD PARSER AGENT
-   ├─ Input: JD text
-   ├─ Process: LLM extracts structured requirements
-   └─ Output: {must_have_skills, years_of_experience, domain_keywords, role_seniority, ...}
-          ↓
-4. RESUME BATCH PROCESSOR AGENT (for each resume)
-   ├─ Step 4.1: Resume Enricher
-   │   ├─ Input: Resume text
-   │   ├─ Process: LLM extracts signals
-   │   └─ Output: {skills, experience_duration, projects, measurable_outcomes, ...}
-   │
-   ├─ Step 4.2: Risk Detector
-   │   ├─ Input: Resume signals + JD requirements
-   │   ├─ Process: Rule-based flag detection
-   │   └─ Output: {flags: [...], total_penalty: 0-20}
-   │
-   ├─ Step 4.3: Scoring Engine
-   │   ├─ Input: Resume signals + JD requirements + Risk flags
-   │   ├─ Process: Calculate 6 component scores
-   │   └─ Output: {final_score: 0-100, breakdown: {...}, penalty: ...}
-   │
-   └─ Step 4.4: Explainer
-       ├─ Input: Score result
-       ├─ Process: Generate markdown explanation
-       └─ Output: {explanation: "...", recommendation: "Shortlist/Review/Reject"}
-          ↓
-5. RANKING AGENT
-   ├─ Input: List of candidates with scores
-   ├─ Process: Sort by final_score (descending)
-   └─ Output: ranked_candidates (with rank numbers)
-          ↓
-6. STREAMLIT DISPLAY
-   ├─ Ranking table (colored by recommendation)
-   ├─ Expandable candidate details
-   ├─ Score breakdown charts
-   └─ Export options (CSV)
-```
+| Layer            | Technology                                      |
+|------------------|--------------------------------------------------|
+| Frontend         | Streamlit (multi-page app)                       |
+| AI Orchestration | LangGraph (StateGraph with typed state machines) |
+| LLM Abstraction  | LangChain (ChatOpenAI, ChatAnthropic, ChatGroq, ChatGoogleGenerativeAI) |
+| Vector Database  | LanceDB (local, file-based)                      |
+| File Parsing     | PyPDF, python-docx                               |
+| Data Processing  | Pandas, PyArrow                                  |
 
 ---
 
-## 📊 Scoring Engine Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      SCORING ENGINE                                  │
-│                  (services/scoring_engine.py)                        │
-└─────────────────────────────────────────────────────────────────────┘
-
-Input: resume_signals, jd_requirements, risk_flags
-
-┌──────────────────────────┐
-│  COMPONENT CALCULATORS   │  (Each returns score + details)
-└──────────────────────────┘
-
-1. calculate_skill_coverage_score()
-   ├─ Match resume skills to JD must-have skills
-   ├─ 3 pts per match (max 10 skills = 30 pts)
-   ├─ +0.5 bonus for strong context
-   └─ Returns: {score: 0-30, matched_skills, missing_skills, ...}
-
-2. calculate_experience_depth_score()
-   ├─ Compare resume years to JD min years
-   ├─ 10 pts for meeting min, +2 pts per extra year
-   ├─ +2 pts for seniority match
-   └─ Returns: {score: 0-20, resume_years, required_years, ...}
-
-3. calculate_domain_relevance_score()
-   ├─ Match resume domains to JD domains
-   ├─ 5 pts per domain match (max 3 = 15 pts)
-   └─ Returns: {score: 0-15, matched_domains, required_domains, ...}
-
-4. calculate_evidence_quality_score()
-   ├─ Check projects mentioned (5-8 pts)
-   ├─ Check skills with context (7 pts if 80%+)
-   └─ Returns: {score: 0-15, projects_count, skills_with_context, ...}
-
-5. calculate_quantification_score()
-   ├─ Count measurable outcomes
-   ├─ 0 outcomes: 0 pts, 1-2: 5 pts, 3-4: 8 pts, 5+: 10 pts
-   └─ Returns: {score: 0-10, outcomes_count, sample_outcomes, ...}
-
-6. calculate_recency_score()
-   ├─ Check most recent role year
-   ├─ 2023+: 10 pts, 2022+: 7 pts, 2020-2021: 4 pts, <2020: 0 pts
-   └─ Returns: {score: 0-10, most_recent_year, ...}
-
-                      ↓
-┌──────────────────────────┐
-│  TOTAL SCORE CALCULATOR  │
-└──────────────────────────┘
-
-base_score = sum of all 6 component scores (0-100)
-penalty = risk_flags.total_penalty (0-20)
-final_score = max(0, min(100, base_score - penalty))
-
-                      ↓
-Output: {
-  final_score: 85,
-  base_score: 93,
-  penalty: 8,
-  breakdown: {
-    skill_coverage: {...},
-    experience_depth: {...},
-    domain_relevance: {...},
-    evidence_quality: {...},
-    quantification: {...},
-    recency: {...}
-  },
-  risk_flags: {...}
-}
-```
-
----
-
-## 🚩 Risk Detection Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     RISK DETECTOR                                    │
-│                  (services/risk_detector.py)                         │
-└─────────────────────────────────────────────────────────────────────┘
-
-Input: resume_signals, jd_requirements
-
-┌──────────────────────────┐
-│   FLAG DETECTION RULES   │
-└──────────────────────────┘
-
-1. WEAK_EVIDENCE (-5 pts)
-   └─ If 3+ skills have NO context or context < 20 chars
-
-2. NO_QUANTIFICATION (-5 pts)
-   └─ If measurable_outcomes list is empty
-
-3. LOW_QUANTIFICATION (-3 pts)
-   └─ If only 1 measurable outcome
-
-4. BUZZWORD_HEAVY (-4 pts)
-   └─ If 5+ buzzwords found (synergy, leverage, disrupt, ...)
-
-5. BUZZWORD_MODERATE (-2 pts)
-   └─ If 3-4 buzzwords found
-
-6. OUTDATED_EXPERIENCE (-4 pts)
-   └─ If most_recent_role_year < 2022
-
-7. NO_PROJECTS (-3 pts)
-   └─ If projects list is empty
-
-8. DOMAIN_MISMATCH (-3 pts)
-   └─ If JD domains != resume domains
-
-9. EXPERIENCE_GAP (-2 pts)
-   └─ If resume years < JD min years
-
-                      ↓
-Output: RiskFlags {
-  flags: [
-    {category: "WEAK_EVIDENCE", description: "...", penalty: 5},
-    {category: "BUZZWORD_MODERATE", description: "...", penalty: 2}
-  ],
-  total_penalty: 7  (capped at 20)
-}
-```
-
----
-
-## 🧩 Module Dependencies
-
-```
-Pages/9_🎯_JD_Resume_Matching.py
-    └─ matching_workflow.py
-           ├─ jd_parser.py
-           │     └─ langchain_openai (LLM)
-           │
-           ├─ resume_enricher.py
-           │     └─ langchain_openai (LLM)
-           │
-           ├─ risk_detector.py
-           │     └─ (no LLM, pure rules)
-           │
-           ├─ scoring_engine.py
-           │     └─ (no LLM, pure rules)
-           │
-           └─ explainer.py
-                 └─ (no LLM, pure text generation)
-```
-
-**Key Design Principle**: Only use LLM for **extraction** (NLP tasks), never for **scoring** (use deterministic rules for explainability).
-
----
-
-## 📁 File Organization
+## Project Structure
 
 ```
 ResumeIntelligence/
-├── app.py                          # Streamlit entry point
-├── Pages/
-│   ├── 1_📂_Upload_Resumes.py      # [Existing]
-│   ├── 2_🔍_Search_Resumes.py      # [Existing]
-│   ├── 3_📊_Resume_Quality_Scoring.py  # [Existing]
-│   ├── 4_🧠_Skill_Gap_Analysis.py  # [Existing]
-│   ├── 5_🤖_Auto_Screening.py      # [Existing]
-│   ├── 6_📝_Resume_Generator.py    # [Existing]
-│   ├── 7_🔗_LinkedIn_To_Resume.py  # [Existing]
-│   ├── 8_📥_Reports_Export.py      # [Existing]
-│   └── 9_🎯_JD_Resume_Matching.py  # [NEW] Main PRD feature
-│
-├── services/
-│   ├── resume_parser.py            # [Existing] Basic text extraction
-│   ├── jd_parser.py                # [NEW] JD requirement extraction
-│   ├── resume_enricher.py          # [NEW] Enhanced resume parsing
-│   ├── risk_detector.py            # [NEW] Risk flag detection
-│   ├── scoring_engine.py           # [NEW] 100-point rubric
-│   ├── explainer.py                # [NEW] Explanation generation
-│   ├── matching_workflow.py        # [NEW] LangGraph orchestration
-│   ├── agent_controller.py         # [Existing] Old workflows
-│   ├── resume_quality_graph.py     # [Existing]
-│   ├── skill_gap_graph.py          # [Existing]
-│   ├── linkedin_resume_graph.py    # [Existing]
+├── Home.py                          # Entry point + sidebar LLM config
+├── Pages/                           # Streamlit multi-page directory
+│   ├── 1_Upload_Resumes.py          # PDF/DOCX upload + LanceDB storage
+│   ├── 2_Search_Resumes.py          # LLM-powered semantic search
+│   ├── 3_Resume_Quality_Scoring.py  # LangGraph quality scoring agent
+│   ├── 4_Skill_Gap_Analysis.py      # LangGraph skill gap agents
+│   ├── 5_Auto_Screening.py          # Threshold-based auto screening
+│   ├── 6_Resume_Generator.py        # AI resume writer
+│   ├── 7_LinkedIn_To_Resume.py      # LinkedIn profile to resume
+│   ├── 8_Reports_Export.py          # CSV export for results
+│   └── 9_JD_Resume_Matching.py      # Full matching pipeline (primary feature)
+├── services/                        # Core business logic
+│   ├── llm_config.py                # Multi-provider LLM factory
+│   ├── matching_workflow.py         # LangGraph JD-Resume matching pipeline
+│   ├── jd_parser.py                 # LLM: extracts structured JD requirements
+│   ├── resume_enricher.py           # LLM: extracts structured resume signals
+│   ├── risk_detector.py             # Rule-based: detects risk flags
+│   ├── scoring_engine.py            # Rule-based: 100-point scoring rubric
+│   ├── explainer.py                 # Rule-based: generates explanations
+│   ├── resume_quality_graph.py      # LangGraph: resume quality workflow
+│   ├── skill_gap_graph.py           # LangGraph: skill gap workflow
+│   ├── linkedin_resume_graph.py     # LangGraph: LinkedIn to resume workflow
+│   ├── agent_controller.py          # Facade for Pages 3-5 (routes tasks)
+│   ├── resume_parser.py             # PDF/DOCX text extraction
 │   └── db/
-│       └── lancedb_client.py       # [Existing] Vector DB
-│
-├── test_matching.py                # [NEW] Test script
-├── IMPLEMENTATION_SUMMARY.md       # [NEW] Documentation
-├── ARCHITECTURE.md                 # [NEW] This file
-└── requirements.txt                # [Existing] Dependencies
+│       └── lancedb_client.py        # LanceDB storage client
+├── data/                            # Runtime data (resumes, DB files)
+├── requirements.txt
+└── test_matching.py                 # Integration test
 ```
 
 ---
 
-## 🔧 Technology Stack
+## How the Main Pipeline Works (Page 9: JD-Resume Matching)
 
-### Frontend
-- **Streamlit**: Multi-page dashboard UI
-- **Pandas**: Data tables and manipulation
-- **Markdown**: Report formatting
+This is the primary feature. It runs a **3-node LangGraph StateGraph**:
 
-### Backend
-- **LangGraph**: Agent workflow orchestration
-- **LangChain**: LLM abstraction layer
-- **OpenRouter / OpenAI**: LLM API (GPT-4o-mini)
-- **Python 3.11**: Core language
+```
+┌─────────────┐     ┌──────────────────┐     ┌──────────┐
+│  JD Parser   │────>│ Resume Processor  │────>│  Ranker   │──── END
+│  (Agent 1)   │     │   (Agent 2)       │     │ (Agent 3) │
+└─────────────┘     └──────────────────┘     └──────────┘
+```
 
-### Storage
-- **LanceDB**: Vector database for resume storage
-- **CSV**: Export format
+### Agent 1: JD Parser
+- **Input:** Raw job description text
+- **Uses:** `jd_parser.py` (LLM call)
+- **Output:** Structured requirements (must-have skills, experience years, seniority, domain keywords)
 
-### Parsing
-- **PyPDF**: PDF text extraction
-- **python-docx**: DOCX text extraction
+### Agent 2: Resume Batch Processor
+For each resume, runs this sub-pipeline:
 
----
+```
+Resume Text
+    │
+    ├── resume_enricher.py  (LLM)  → Structured signals (skills + context, experience, education)
+    │
+    ├── risk_detector.py    (Rules) → Risk flags (skills without context, gaps, job hopping, etc.)
+    │
+    ├── scoring_engine.py   (Rules) → 100-point score breakdown
+    │                                   ├── Skill Coverage      (30 pts)
+    │                                   ├── Experience Depth     (20 pts)
+    │                                   ├── Domain Relevance     (15 pts)
+    │                                   ├── Evidence Quality     (15 pts)
+    │                                   ├── Quantification       (10 pts)
+    │                                   ├── Recency              (10 pts)
+    │                                   └── Risk Penalties       (up to -20 pts)
+    │
+    └── explainer.py        (Rules) → Human-readable explanation + recommendation
+```
 
-## ⚡ Performance Characteristics
+### Agent 3: Ranker
+- Sorts all candidates by final score (descending)
+- Assigns rank numbers
 
-### Latency
-- **JD Parsing**: ~2-3 seconds (1 LLM call)
-- **Resume Processing**: ~5-10 seconds per resume (2 LLM calls)
-- **Batch Processing**: ~5-10 seconds × N resumes (parallel possible in future)
-
-### API Costs (Estimated)
-- **GPT-4o-mini**: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens
-- **Per Resume**: ~3-4 LLM calls = ~$0.001-0.002 per resume
-- **100 Resumes**: ~$0.10-0.20 total
-
-### Scalability
-- **Current**: Sequential processing (1 resume at a time)
-- **Future**: Parallel processing (10-50 resumes simultaneously)
-- **Database**: LanceDB handles millions of resumes
-
----
-
-## 🎯 Key Differentiators (vs Simple Keyword Matching)
-
-| Feature | Keyword Matching | Our System |
-|---------|------------------|------------|
-| **Skill Detection** | Exact match only | Context-aware (checks WHERE skill was used) |
-| **Evidence Quality** | Not evaluated | Checks projects, quantified outcomes |
-| **Recency** | Ignored | Penalizes outdated experience |
-| **Buzzwords** | Often boosted | Penalized (red flag) |
-| **Explainability** | None | Full markdown breakdown per component |
-| **False Positives** | High (buzzword-heavy resumes pass) | Low (risk flags catch vague claims) |
-| **Scoring** | Binary (match/no match) | Nuanced (0-100 with 6 components) |
+### Output
+Each candidate gets:
+- **Score:** 0-100 with 6-component breakdown
+- **Recommendation:** Shortlist / Review / Reject
+- **Explanation:** Detailed reasoning for the score
+- **Summary:** One-line summary
 
 ---
 
-## 🧪 Testing Strategy
+## 100-Point Scoring Rubric
 
-### Unit Tests (Recommended)
-- `test_jd_parser.py`: Validate JD extraction accuracy
-- `test_resume_enricher.py`: Validate signal extraction
-- `test_scoring_engine.py`: Validate score calculations
-- `test_risk_detector.py`: Validate flag detection logic
-
-### Integration Test
-- `test_matching.py`: End-to-end workflow (already created)
-
-### User Acceptance Testing
-- Test with 20-50 real resumes
-- Compare rankings to human recruiter judgments
-- Measure agreement rate (target: >80%)
+| Component          | Max Points | What It Measures                                    |
+|--------------------|------------|-----------------------------------------------------|
+| Skill Coverage     | 30         | % of required JD skills found in resume             |
+| Experience Depth   | 20         | Years of experience vs. JD requirement              |
+| Domain Relevance   | 15         | Overlap between resume domain and JD domain         |
+| Evidence Quality   | 15         | Skills backed by project context (not just listed)  |
+| Quantification     | 10         | Measurable outcomes (numbers, percentages, metrics) |
+| Recency            | 10         | How recent the relevant experience is               |
+| **Risk Penalties** | **-20**    | Job hopping, gaps, skills without context            |
 
 ---
 
-## 📈 Future Enhancements
+## LLM Configuration
 
-### Semantic Matching
-- Use embeddings for skill similarity (e.g., "React" ≈ "React.js")
-- Domain-specific skill graphs
+The platform supports **6 providers** with **25+ models**, configured at runtime via the sidebar:
 
-### Confidence Scores
-- Add confidence levels to extracted data (High/Medium/Low)
-- Adjust scoring based on extraction confidence
+| Provider              | Models                                    | API Key Source         |
+|-----------------------|-------------------------------------------|------------------------|
+| OpenAI                | gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo | platform.openai.com |
+| Anthropic (Claude)    | claude-sonnet-4, claude-3.5-haiku, claude-3-opus | console.anthropic.com |
+| Google Gemini         | gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro | aistudio.google.com |
+| Groq                  | llama-3.3-70b, llama-3.1-8b, mixtral-8x7b, gemma2-9b | console.groq.com |
+| OpenRouter            | Multiple paid models via unified API      | openrouter.ai          |
+| Free Models (OpenRouter) | Free-tier models (no cost)             | openrouter.ai          |
 
-### Calibration
-- Track hire outcomes (hired/rejected after interview)
-- Adjust rubric weights based on historical success
-
-### Multi-Modal
-- Parse resume images (screenshots, scanned PDFs)
-- Extract data from LinkedIn profile URLs (no scraping, use API)
-
----
-
-## ✅ Production Checklist
-
-- [x] All FR1-FR5 requirements implemented
-- [x] 100-point rubric with explainability
-- [x] Risk flag detection
-- [x] Streamlit dashboard UI
-- [x] Export functionality
-- [ ] Valid API keys configured in `.env`
-- [ ] Test with 20+ real resumes
-- [ ] Validate scoring accuracy vs human baseline
-- [ ] Optimize LLM prompts for cost/quality
-- [ ] Add error handling for malformed resumes
-- [ ] Add logging for debugging
-- [ ] Deploy to cloud (AWS/GCP/Azure) or local server
+**How it works:**
+1. User selects provider + pastes API key in sidebar
+2. Config stored in `st.session_state`
+3. Every service calls `get_llm()` which reads session state and instantiates the correct LangChain class
+4. `extract_json()` helper strips markdown code fences (non-OpenAI models often wrap JSON in backticks)
 
 ---
 
-**Architecture Version**: 1.0
-**Last Updated**: February 8, 2026
-**Status**: ✅ Implementation Complete
+## LangGraph Workflows
+
+The app uses **4 LangGraph StateGraph workflows**:
+
+| Workflow               | File                        | Nodes | Used By        |
+|------------------------|-----------------------------|-------|----------------|
+| JD-Resume Matching     | `matching_workflow.py`      | 3     | Page 9         |
+| Resume Quality Scoring | `resume_quality_graph.py`   | 2     | Pages 3, 5     |
+| Skill Gap Analysis     | `skill_gap_graph.py`        | 2     | Page 4         |
+| LinkedIn to Resume     | `linkedin_resume_graph.py`  | 2     | Page 7         |
+
+Each workflow uses **TypedDict state classes** for type-safe state management across nodes.
+
+---
+
+## Data Flow
+
+```
+User uploads PDF/DOCX
+        │
+        ▼
+resume_parser.py (extract text)
+        │
+        ▼
+LanceDB (store text + filename)
+        │
+        ▼
+User provides JD + selects resumes
+        │
+        ▼
+matching_workflow.py (LangGraph)
+   ├── jd_parser.py       → structured requirements
+   ├── resume_enricher.py  → structured signals
+   ├── risk_detector.py    → risk flags
+   ├── scoring_engine.py   → 100-point scores
+   ├── explainer.py        → explanations
+   └── ranker              → sorted results
+        │
+        ▼
+Streamlit UI (colored table, charts, expandable reports)
+        │
+        ▼
+CSV Export (ranking table + shortlist)
+```
+
+---
+
+## What Uses LLM vs. Rules
+
+| Component        | LLM or Rules | Why                                              |
+|------------------|--------------|--------------------------------------------------|
+| JD Parser        | LLM          | Natural language understanding of JD requirements |
+| Resume Enricher  | LLM          | Extract structured signals from unstructured text |
+| Risk Detector    | Rules        | Deterministic, explainable risk flags             |
+| Scoring Engine   | Rules        | Reproducible, auditable 100-point scoring         |
+| Explainer        | Rules        | Consistent explanation format                     |
+| Resume Generator | LLM          | Creative writing for ATS-optimized resumes        |
+| Resume Search    | LLM          | Semantic matching across resume corpus            |

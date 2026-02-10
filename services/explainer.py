@@ -1,10 +1,12 @@
 """
-Explainability Module - FR4 Implementation
-Generates human-readable explanations and recommendations
+Explainability Module
+Generates human-readable explanations and recommendations.
 """
 
 from typing import Dict, Literal
+from datetime import datetime
 
+CURRENT_YEAR = datetime.now().year
 
 RecommendationType = Literal["Shortlist", "Review", "Reject"]
 
@@ -142,11 +144,11 @@ def explain_recency(recency_data: dict) -> str:
 
     explanation = f"**Recency: {score}/10 points**\n\n"
 
-    if most_recent_year >= 2023:
+    if most_recent_year >= CURRENT_YEAR - 1:
         explanation += f"✅ Recent experience (most recent role: {most_recent_year})\n\n"
-    elif most_recent_year >= 2022:
+    elif most_recent_year >= CURRENT_YEAR - 2:
         explanation += f"⚠️ Moderately recent experience (most recent role: {most_recent_year})\n\n"
-    elif most_recent_year >= 2020:
+    elif most_recent_year >= CURRENT_YEAR - 4:
         explanation += f"⚠️ Somewhat dated experience (most recent role: {most_recent_year})\n\n"
     else:
         explanation += f"❌ Outdated experience (most recent role: {most_recent_year or 'unknown'})\n\n"

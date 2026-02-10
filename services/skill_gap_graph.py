@@ -2,10 +2,8 @@
 from typing import TypedDict, List, Optional
 from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
-from services.llm_config import get_llm
+from services.llm_config import get_llm, extract_json
 import json
-
-llm = get_llm(temperature=0)
 
 class SkillGapState(TypedDict):
     resume_text: str
@@ -32,8 +30,12 @@ Return ONLY valid JSON:
 """
     )
 
+    llm = get_llm(temperature=0)
     response = llm.invoke(prompt.format(resume=state["resume_text"]))
-    skills = json.loads(response.content)["skills"]
+    try:
+        skills = json.loads(extract_json(response.content))["skills"]
+    except (json.JSONDecodeError, KeyError):
+        skills = []
 
     return {"resume_skills": skills}
 
@@ -54,8 +56,12 @@ Return ONLY valid JSON:
 """
     )
 
+    llm = get_llm(temperature=0)
     response = llm.invoke(prompt.format(jd=state["jd_text"]))
-    skills = json.loads(response.content)["skills"]
+    try:
+        skills = json.loads(extract_json(response.content))["skills"]
+    except (json.JSONDecodeError, KeyError):
+        skills = []
 
     return {"jd_skills": skills}
 

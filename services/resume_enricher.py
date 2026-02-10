@@ -1,15 +1,14 @@
 """
-Enhanced Resume Parser - FR2 Implementation
-Extracts structured signals from resumes for evidence-based scoring
+Resume Enricher
+Extracts structured signals from resumes for evidence-based scoring.
 """
 
 from typing import TypedDict, List, Optional, Dict
 from langchain_core.prompts import PromptTemplate
-from services.llm_config import get_llm
+from services.llm_config import get_llm, extract_json
+from datetime import datetime
 import json
-import re
-
-llm = get_llm(temperature=0)
+CURRENT_YEAR = datetime.now().year
 
 
 class ResumeSignals(TypedDict):
@@ -36,7 +35,7 @@ def extract_resume_signals(resume_text: str) -> ResumeSignals:
     """
 
     prompt = PromptTemplate(
-        input_variables=["resume"],
+        input_variables=["resume", "current_year", "current_year_minus1"],
         template="""
 You are an expert resume analyzer extracting structured data for candidate evaluation.
 
@@ -55,8 +54,8 @@ RULES:
      "total_years": 5,
      "recent_years": 2,
      "positions": [
-       {{"role": "Senior Engineer", "company": "ABC Corp", "duration": "2022-2024", "years": 2}},
-       {{"role": "Engineer", "company": "XYZ Ltd", "duration": "2019-2022", "years": 3}}
+       {{"role": "Senior Engineer", "company": "ABC Corp", "duration": "2024-{current_year}", "years": 2}},
+       {{"role": "Engineer", "company": "XYZ Ltd", "duration": "2021-2024", "years": 3}}
      ]
    }}
 
@@ -66,8 +65,8 @@ RULES:
 4. measurable_outcomes: Extract ONLY quantified achievements (numbers, %, $, scale, latency, users)
    Examples: ["Reduced deployment time by 60%", "Saved $100K annually", "Scaled to 10M users", "Decreased latency from 500ms to 50ms"]
 
-5. recency_indicators: Determine if candidate has recent (2023-2024) experience
-   Example: {{"has_recent_experience": true, "most_recent_role_year": 2024, "most_recent_role": "Senior Engineer at ABC Corp"}}
+5. recency_indicators: Determine if candidate has recent ({current_year_minus1}-{current_year}) experience
+   Example: {{"has_recent_experience": true, "most_recent_role_year": {current_year}, "most_recent_role": "Senior Engineer at ABC Corp"}}
 
 6. domain_experience: Extract industry domains worked in (e.g., "fintech", "healthcare", "e-commerce", "cloud infrastructure")
 
@@ -86,7 +85,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     "total_years": 5,
     "recent_years": 2,
     "positions": [
-      {{"role": "Senior Engineer", "company": "ABC Corp", "duration": "2022-2024", "years": 2}}
+      {{"role": "Senior Engineer", "company": "ABC Corp", "duration": "2024-{current_year}", "years": 2}}
     ]
   }},
   "projects": [
@@ -98,7 +97,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   ],
   "recency_indicators": {{
     "has_recent_experience": true,
-    "most_recent_role_year": 2024,
+    "most_recent_role_year": {current_year},
     "most_recent_role": "Senior Engineer at ABC Corp"
   }},
   "domain_experience": ["fintech", "cloud infrastructure"],
@@ -108,10 +107,17 @@ Return ONLY valid JSON (no markdown, no explanation):
 """
     )
 
-    response = llm.invoke(prompt.format(resume=resume_text))
+    llm = get_llm(temperature=0)
+    response = llm.invoke(prompt.format(
+        resume=resume_text,
+        current_year=CURRENT_YEAR,
+        current_year_minus1=CURRENT_YEAR - 1
+    ))
 
     try:
-        parsed = json.loads(response.content)
+        content = extract_json(response.content)
+
+        parsed = json.loads(content)
         return parsed
     except json.JSONDecodeError:
         # Fallback to minimal structure

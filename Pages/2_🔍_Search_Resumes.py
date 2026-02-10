@@ -1,14 +1,17 @@
 import os
 import json
+from pathlib import Path
 import streamlit as st
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from services.db.lancedb_client import get_or_create_table
-from services.llm_config import get_llm
+from services.llm_config import get_llm, extract_json
 
-RESUME_DIR = "data/raw_resumes"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RESUME_DIR = str(PROJECT_ROOT / "data" / "raw_resumes")
 
-st.title("🔍 Resume Search (LLM Powered)")
+st.title("🔍 Resume Search")
+st.caption("LLM-powered semantic search across all stored resumes.")
 
 # -----------------------------
 # Load resumes from LanceDB
@@ -19,6 +22,13 @@ df = table.to_pandas()
 if df.empty:
     st.warning("No resumes found. Please upload resumes first.")
     st.stop()
+
+MAX_RESUMES = 50
+if len(df) > MAX_RESUMES:
+    st.warning(f"Database contains {len(df)} resumes. Searching the most recent {MAX_RESUMES}.")
+    df = df.tail(MAX_RESUMES)
+
+st.info(f"Searching across {len(df)} resumes")
 
 # -----------------------------
 # User input
@@ -36,10 +46,12 @@ if not query:
 # -----------------------------
 resumes_text = ""
 for _, row in df.iterrows():
+    # Truncate individual resumes to avoid exceeding context limits
+    text = row['text'][:3000]
     resumes_text += f"""
 Filename: {row['filename']}
 Resume:
-{row['text']}
+{text}
 --------------------
 """
 
@@ -82,30 +94,35 @@ If no resumes match:
 )
 
 # -----------------------------
-# LLM
+# LLM guard + search
 # -----------------------------
-llm = get_llm(temperature=0)
+if not st.session_state.get("llm_configured"):
+    st.error("⚠️ Please configure an LLM provider in the sidebar before searching.")
+    st.stop()
 
-chain = prompt | llm | StrOutputParser()
+try:
+    llm = get_llm(temperature=0)
+    chain = prompt | llm | StrOutputParser()
 
-# -----------------------------
-# Run search
-# -----------------------------
-with st.spinner("🔍 Searching resumes using AI reasoning..."):
-    raw_result = chain.invoke(
-        {
-            "resumes": resumes_text,
-            "query": query
-        }
-    )
+    with st.spinner("🔍 Searching resumes using AI reasoning..."):
+        raw_result = chain.invoke(
+            {
+                "resumes": resumes_text,
+                "query": query
+            }
+        )
+except Exception as e:
+    st.error(f"❌ LLM Error: {e}")
+    st.stop()
 
 # -----------------------------
 # Parse output
 # -----------------------------
-st.subheader("📄 Search Results")
+st.markdown("---")
+st.subheader("Search Results")
 
 try:
-    parsed = json.loads(raw_result)
+    parsed = json.loads(extract_json(raw_result))
 except json.JSONDecodeError:
     st.error("❌ Failed to parse LLM output")
     st.text(raw_result)

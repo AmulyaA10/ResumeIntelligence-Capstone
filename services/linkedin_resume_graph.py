@@ -1,6 +1,7 @@
 from typing import TypedDict, Optional, Dict
 from langchain_core.prompts import PromptTemplate
-from services.llm_config import get_llm
+from langgraph.graph import StateGraph, END
+from services.llm_config import get_llm, extract_json
 import json
 
 class LinkedInResumeState(TypedDict):
@@ -10,16 +11,14 @@ class LinkedInResumeState(TypedDict):
     resume: Optional[str]
 
 
-llm = get_llm(temperature=0.3)
-
 def linkedin_fetch_agent(state: LinkedInResumeState):
-    # MOCKED profile content (capstone safe)
+    # MOCKED profile content (placeholder for real LinkedIn API integration)
     mock_profile = """
 Name: Rahul Sharma
 Headline: Senior AI Engineer
 Experience:
-- AI Engineer at ABC Corp (2021–Present)
-- Data Scientist at XYZ Ltd (2019–2021)
+- AI Engineer at ABC Corp (2021-Present)
+- Data Scientist at XYZ Ltd (2019-2021)
 Skills:
 Python, LangChain, AWS, Docker, Machine Learning
 Education:
@@ -48,11 +47,16 @@ Return ONLY valid JSON:
 """
     )
 
+    llm = get_llm(temperature=0.3)
     response = llm.invoke(
         prompt.format(profile=state["raw_profile"])
     )
 
-    return {"parsed_profile": json.loads(response.content)}
+    content = extract_json(response.content)
+    try:
+        return {"parsed_profile": json.loads(content)}
+    except json.JSONDecodeError:
+        return {"parsed_profile": {"name": "", "headline": "", "experience": [], "skills": [], "education": []}}
 
 def resume_writer_agent(state: LinkedInResumeState):
     profile = state["parsed_profile"]
@@ -73,16 +77,13 @@ Rules:
 """
     )
 
+    llm = get_llm(temperature=0.3)
     response = llm.invoke(
         prompt.format(profile=json.dumps(profile, indent=2))
     )
 
     return {"resume": response.content}
 
-
-
-
-from langgraph.graph import StateGraph, END
 
 def build_linkedin_resume_graph():
     graph = StateGraph(LinkedInResumeState)

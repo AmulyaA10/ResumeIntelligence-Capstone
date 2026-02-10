@@ -1,12 +1,10 @@
 from services.resume_quality_graph import build_resume_quality_graph
 from services.skill_gap_graph import build_skill_gap_graph
 from services.linkedin_resume_graph import build_linkedin_resume_graph
-from services.langgraph_workflow import build_resume_graph
 
 _quality_graph = build_resume_quality_graph()
 _skill_gap_graph = build_skill_gap_graph()
 _linkedin_graph = build_linkedin_resume_graph()
-graph = build_resume_graph()
 
 
 def run_resume_pipeline(task: str, resumes: list = None, query: str = None):
