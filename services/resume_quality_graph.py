@@ -1,0 +1,71 @@
+from typing import TypedDict, List, Optional
+from langgraph.graph import StateGraph, END
+from langchain_core.prompts import PromptTemplate
+from services.llm_config import get_llm, extract_json
+import json
+
+# -----------------------------
+# State
+# -----------------------------
+class ResumeQualityState(TypedDict):
+    resumes: List[str]
+    parsed: Optional[str]
+    score: Optional[dict]
+
+# -----------------------------
+# Agents
+# -----------------------------
+def resume_reader_agent(state: ResumeQualityState):
+    resume_text = state["resumes"][0]
+    return {"parsed": resume_text}
+
+
+def quality_scoring_agent(state: ResumeQualityState):
+    prompt = PromptTemplate(
+    input_variables=["resume"],
+    template="""
+You are an expert resume reviewer.
+
+Resume:
+{resume}
+
+TASK:
+Evaluate resume quality on a scale of 0–100.
+
+Return ONLY valid JSON:
+
+{{
+  "clarity": 0,
+  "skills": 0,
+  "format": 0,
+  "overall": 0
+}}
+"""
+)
+
+    llm = get_llm(temperature=0)
+    response = llm.invoke(
+        prompt.format(resume=state["parsed"])
+    )
+
+    content = extract_json(response.content)
+    try:
+        return {"score": json.loads(content)}
+    except json.JSONDecodeError:
+        return {"score": {"clarity": 0, "skills": 0, "format": 0, "overall": 0}}
+
+
+# -----------------------------
+# Graph
+# -----------------------------
+def build_resume_quality_graph():
+    graph = StateGraph(ResumeQualityState)
+
+    graph.add_node("reader", resume_reader_agent)
+    graph.add_node("score", quality_scoring_agent)
+
+    graph.set_entry_point("reader")
+    graph.add_edge("reader", "score")
+    graph.add_edge("score", END)
+
+    return graph.compile()
