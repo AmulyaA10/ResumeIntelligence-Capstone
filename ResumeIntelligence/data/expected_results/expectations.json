@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "name": "devops_match",
+      "jd_file": "jd_01_senior_devops.docx",
+      "resume_files": [
+        "persona_01_senior_devops.docx",
+        "persona_02_mid_data_engineer.docx",
+        "persona_03_junior_frontend.docx",
+        "persona_04_senior_backend.docx",
+        "persona_05_product_manager.docx",
+        "persona_06_security_engineer.docx",
+        "persona_07_qa_automation.docx",
+        "persona_08_career_gap.docx"
+      ],
+      "expected_top": [
+        "persona_01_senior_devops.docx"
+      ],
+      "top_k": 3,
+      "expected_bottom": [
+        "persona_03_junior_frontend.docx",
+        "persona_05_product_manager.docx"
+      ],
+      "bottom_k": 4
+    },
+    {
+      "name": "data_engineer_match",
+      "jd_file": "jd_02_data_engineer.docx",
+      "resume_files": [
+        "persona_01_senior_devops.docx",
+        "persona_02_mid_data_engineer.docx",
+        "persona_03_junior_frontend.docx",
+        "persona_04_senior_backend.docx",
+        "persona_05_product_manager.docx",
+        "persona_06_security_engineer.docx",
+        "persona_07_qa_automation.docx",
+        "persona_08_career_gap.docx"
+      ],
+      "expected_top": [
+        "persona_02_mid_data_engineer.docx"
+      ],
+      "top_k": 3,
+      "expected_bottom": [
+        "persona_03_junior_frontend.docx",
+        "persona_05_product_manager.docx"
+      ],
+      "bottom_k": 4
+    },
+    {
+      "name": "frontend_match",
+      "jd_file": "jd_03_frontend_engineer.docx",
+      "resume_files": [
+        "persona_01_senior_devops.docx",
+        "persona_02_mid_data_engineer.docx",
+        "persona_03_junior_frontend.docx",
+        "persona_04_senior_backend.docx",
+        "persona_05_product_manager.docx",
+        "persona_06_security_engineer.docx",
+        "persona_07_qa_automation.docx",
+        "persona_08_career_gap.docx"
+      ],
+      "expected_top": [
+        "persona_03_junior_frontend.docx"
+      ],
+      "top_k": 3,
+      "expected_bottom": [
+        "persona_01_senior_devops.docx",
+        "persona_02_mid_data_engineer.docx"
+      ],
+      "bottom_k": 4
+    }
+  ]
+}
