@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 from services.resume_parser import extract_text
-from services.db.lancedb_client import store_resume, is_duplicate
+from services.db.lancedb_client import store_resume, is_duplicate, extract_signals_if_llm_ready
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = str(PROJECT_ROOT / "data" / "raw_resumes")
@@ -29,6 +29,7 @@ if st.button("Process Resumes", type="primary"):
         progress = st.progress(0, text="Processing...")
         success_count = 0
         dup_count = 0
+        signals_count = 0
         for idx, file in enumerate(files):
             try:
                 # Extract text from temp file first (before committing to disk)
@@ -50,9 +51,16 @@ if st.button("Process Resumes", type="primary"):
                     with open(file_path, "wb") as f:
                         f.write(file.getbuffer())
 
-                    # Index in LanceDB
+                    # Index in LanceDB (with cached signals if LLM is ready)
                     if store_db:
-                        store_resume(file.name, text)
+                        progress.progress(
+                            (idx + 0.5) / len(files),
+                            text=f"Extracting signals for {file.name}..."
+                        )
+                        signals = extract_signals_if_llm_ready(text)
+                        store_resume(file.name, text, signals=signals)
+                        if signals:
+                            signals_count += 1
 
                     success_count += 1
             except Exception as e:
@@ -65,6 +73,10 @@ if st.button("Process Resumes", type="primary"):
             st.success(f"Processed {success_count} of {len(files)} resume(s) successfully.")
             if store_db:
                 st.info(f"{success_count} resumes indexed in LanceDB.")
+                if signals_count > 0:
+                    st.info(f"⚡ {signals_count} resume(s) pre-analyzed — matching will be faster.")
+                elif signals_count == 0 and success_count > 0:
+                    st.caption("💡 Configure an LLM in the sidebar to pre-analyze resumes at upload time for faster matching.")
         if dup_count > 0:
             st.info(f"🔁 {dup_count} duplicate(s) skipped.")
 

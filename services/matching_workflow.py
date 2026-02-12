@@ -10,6 +10,7 @@ from services.resume_enricher import extract_resume_signals
 from services.risk_detector import detect_risk_flags
 from services.scoring_engine import calculate_total_score
 from services.explainer import generate_full_explanation, generate_recommendation, generate_summary_line
+from services.db.lancedb_client import get_cached_signals
 
 
 def validate_api_key():
@@ -56,6 +57,7 @@ def jd_parser_agent(state: MatchingState) -> Dict:
 def resume_batch_processor_agent(state: MatchingState) -> Dict:
     """
     Agent 2: Process all resumes and extract signals.
+    Uses cached signals from LanceDB when available to skip LLM calls.
     """
     resume_texts = state["resume_texts"]
     jd_requirements = state["jd_requirements"]
@@ -63,12 +65,19 @@ def resume_batch_processor_agent(state: MatchingState) -> Dict:
     print(f"📄 Processing {len(resume_texts)} resumes...")
 
     candidates = []
+    cache_hits = 0
 
     for idx, resume_text in enumerate(resume_texts):
         print(f"  Processing candidate {idx + 1}/{len(resume_texts)}...")
 
-        # Extract structured signals
-        resume_signals = extract_resume_signals(resume_text)
+        # Check for cached signals first (skip LLM call if available)
+        resume_signals = get_cached_signals(resume_text)
+        if resume_signals:
+            cache_hits += 1
+            print(f"    ⚡ Using cached signals for candidate {idx + 1}")
+        else:
+            # Extract structured signals via LLM (no cache available)
+            resume_signals = extract_resume_signals(resume_text)
 
         # Detect risk flags
         risk_flags = detect_risk_flags(resume_signals, jd_requirements)
@@ -99,6 +108,9 @@ def resume_batch_processor_agent(state: MatchingState) -> Dict:
             "explanation": explanation,
             "summary": summary
         })
+
+    if cache_hits > 0:
+        print(f"  ⚡ {cache_hits}/{len(resume_texts)} resumes used cached signals (skipped LLM)")
 
     return {"candidates": candidates}
 

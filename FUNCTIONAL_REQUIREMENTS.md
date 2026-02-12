@@ -6,11 +6,13 @@
 
 ## 1. Resume Ingestion & Storage
 
-**FR-1:** Users can bulk-upload multiple PDF/DOCX resume files, which are parsed into plain text via `pypdf`/`python-docx` and persisted both as raw files in `data/raw_resumes/` and as structured records (UUID `id`, `filename`, `text`) in a LanceDB vector table using a PyArrow schema.
+**FR-1:** Users can bulk-upload multiple PDF/DOCX resume files, which are parsed into plain text via `pypdf`/`python-docx` and persisted both as raw files in `data/raw_resumes/` and as structured records (UUID `id`, `filename`, `text`, `fingerprint`, `signals`) in a LanceDB vector table using a PyArrow schema.
 
-**FR-2:** Each uploaded resume is stored in LanceDB with an auto-generated UUID-4 identifier, and the system creates the `data/lancedb/` directory and `resumes` table on first use if they don't exist.
+**FR-2:** Each uploaded resume is stored in LanceDB with an auto-generated UUID-4 identifier, SHA-256 content fingerprint for deduplication, and optionally pre-extracted structured signals (JSON) — the system creates the `data/lancedb/` directory and `resumes` table on first use if they don't exist, with automatic schema migration for older tables.
 
 **FR-3:** Corrupt or unreadable files are caught per-file with try/except so that one bad upload does not abort the entire batch — the user sees individual error messages and a final count of successfully processed files.
+
+**FR-3a:** At upload time, if an LLM provider is configured, the system pre-extracts structured resume signals (skills, experience, projects, measurable outcomes, recency, domain, education, certifications) and caches them in LanceDB alongside the raw text — enabling faster JD-resume matching on subsequent runs by skipping redundant LLM calls; uploads still work fully without an LLM configured (signals are extracted lazily on first match).
 
 ---
 
